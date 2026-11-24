@@ -32,6 +32,8 @@ for path in JS:
     # Retire les adresses web présentes uniquement dans les commentaires du code
     code = "\n".join(re.sub(r"https?://\S+", "", l) if l.lstrip().startswith(("//", "/*", "*")) else l
                      for l in code.split("\n"))
+    # ... et celles des simples messages d'avertissement (on garde les espaces de noms w3.org, indispensables)
+    code = re.sub(r"https?://(?!www\.w3\.org/)[^\s\"'`)]+", "", code)
     print(f"OK  {path}  ({len(code)//1024} Ko)")
     html = html.replace(tag, f"<script>/* three@0.147.0 {path} */\n{code}\n</script>", 1)
 
