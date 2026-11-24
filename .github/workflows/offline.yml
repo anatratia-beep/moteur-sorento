@@ -1,0 +1,50 @@
+name: Version hors ligne
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Moteur-Sorento-2014-3D.html
+      - rendre_offline.py
+      - .github/workflows/offline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Créer Moteur-Sorento-2014-3D-offline.html
+        run: python3 rendre_offline.py Moteur-Sorento-2014-3D.html
+
+      - name: Vérifier qu'il ne reste aucun lien externe
+        run: |
+          if grep -oE "https?://[^\"' )<>]+" Moteur-Sorento-2014-3D-offline.html | grep -v '^http://www.w3.org/' ; then
+            echo "Lien externe trouvé" ; exit 1
+          fi
+          echo "Aucun lien externe."
+
+      - name: Vérifier que la page s'ouvre sans erreur JavaScript (Chrome sans réseau)
+        run: |
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --headless=new --no-sandbox --enable-unsafe-swiftshader --use-angle=swiftshader \
+            --proxy-server=127.0.0.1:9 --proxy-bypass-list="<-loopback>" \
+            --enable-logging=stderr --v=0 --virtual-time-budget=8000 \
+            --dump-dom "file://$PWD/Moteur-Sorento-2014-3D-offline.html" > dom.html 2> chrome.log || true
+          echo "--- Erreurs console ---"; grep -iE "Uncaught|SyntaxError|ReferenceError|TypeError" chrome.log || echo "aucune"
+          if grep -qiE "Uncaught|SyntaxError|ReferenceError" chrome.log; then exit 1; fi
+          grep -q "Pièces du moteur" dom.html || { echo "La liste des pièces n'a pas été générée"; exit 1; }
+          if grep -q 'id="err" style="display: grid' dom.html; then echo "Message d'erreur WebGL affiché"; exit 1; fi
+          echo "Page OK : moteur 3D chargé sans erreur."
+
+      - name: Enregistrer le fichier dans le dépôt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Moteur-Sorento-2014-3D-offline.html
+          git diff --cached --quiet || git commit -m "Version hors ligne générée automatiquement"
+          git push
